@@ -10,15 +10,15 @@
         <EmbeddedResource Include="Resources\macos\ffprobe">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </EmbeddedResource>
-        <None Remove="Resources\linux\ffprobe" />
+        <None Remove="Resources\linux\ffprobe"/>
         <EmbeddedResource Include="Resources\linux\ffprobe">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </EmbeddedResource>
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="FFMpegCore" Version="5.2.0" />
-      <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.8" />
+        <PackageReference Include="FFMpegCore" Version="5.2.0"/>
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.8"/>
     </ItemGroup>
 </Project>

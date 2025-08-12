@@ -1,7 +1,5 @@
 ﻿using CommandLine;
-using CommandLine.Text;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PhotoRenamer;
 using VideoRenamer;
 
@@ -13,6 +11,7 @@ internal abstract class Program
     {
         var result = new Parser(with =>
             {
+                // Allows passing --log-level without having to pass the value as PascalCasing
                 with.CaseInsensitiveEnumValues = true;
                 with.HelpWriter = Console.Error;
             })
@@ -20,7 +19,7 @@ internal abstract class Program
             .MapResult(
                 (VideoRenamerOptions options) => Start(options),
                 (PhotoRenamerOptions options) => Start(options),
-                error => 1
+                _ => 1
             );
         return result;
     }
@@ -29,7 +28,7 @@ internal abstract class Program
     {
         // TODO: Console logging is probably ok for now, but Serilog is best since we would be able to write to Console AND a file (Debug to file, Information to console)
         //  Let's switch to that at some point™
-        
+
         var applicationLoggerFactory = LoggerFactory.Create(builder =>
             builder.SetMinimumLevel(options.LogLevel).AddSimpleConsole(loggerOptions =>
             {
@@ -49,7 +48,8 @@ internal abstract class Program
 
                 var result = new VideoRenamerProgram(
                     applicationLoggerFactory,
-                    videoRenamerOptions.OperatingDirectory
+                    videoRenamerOptions.OperatingDirectory,
+                    videoRenamerOptions.SortedDirectoryPath
                 ).Run();
 
                 programLogger.LogInformation("Video Renamer program finished.");
@@ -63,7 +63,7 @@ internal abstract class Program
                 var result = new PhotoRenamerProgram(
                     applicationLoggerFactory,
                     photoRenamerOptions.UnsortedFilesPath,
-                    photoRenamerOptions.SortedPhotosPath
+                    photoRenamerOptions.SortedDirectoryPath
                 ).Run();
 
                 programLogger.LogInformation("Photo Renamer program finished.");

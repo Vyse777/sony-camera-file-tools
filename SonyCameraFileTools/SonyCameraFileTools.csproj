@@ -8,13 +8,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\PhotoRenamer\PhotoRenamer.csproj" />
-      <ProjectReference Include="..\VideoRenamer\VideoRenamer.csproj" />
+        <ProjectReference Include="..\PhotoRenamer\PhotoRenamer.csproj"/>
+        <ProjectReference Include="..\VideoRenamer\VideoRenamer.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="CommandLineParser" Version="2.9.1" />
-      <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.8" />
+        <PackageReference Include="CommandLineParser" Version="2.9.1"/>
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.8"/>
     </ItemGroup>
 </Project>

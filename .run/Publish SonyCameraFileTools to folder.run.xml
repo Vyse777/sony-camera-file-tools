@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Publish SonyCameraFileTools to folder" type="DotNetFolderPublish" factoryName="Publish to folder">
+    <riderPublish configuration="Release" delete_existing_files="true" platform="Any CPU" produce_single_file="true" runtime="linux-x64" self_contained="true" target_folder="$PROJECT_DIR$/publish/SonyCameraFileTools" target_framework="net9.0" uuid_high="-4533797528592039770" uuid_low="-5407553084003273465" />
+    <method v="2" />
+  </configuration>
+</component>

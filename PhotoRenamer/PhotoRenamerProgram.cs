@@ -1,7 +1,7 @@
 ﻿using System.Globalization;
-using Microsoft.Extensions.Logging;
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
+using Microsoft.Extensions.Logging;
 using Directory = System.IO.Directory;
 
 namespace PhotoRenamer;
@@ -18,7 +18,7 @@ public class PhotoRenamerProgram(
     {
         var unsortedDirectoryInfo = new DirectoryInfo(unsortedFilesDirectoryPath);
         if (!unsortedDirectoryInfo.Exists)
-            throw new DirectoryNotFoundException($"Operating directory {unsortedFilesDirectoryPath} not found.");
+            throw new DirectoryNotFoundException($"Operating directory {unsortedFilesDirectoryPath} was not found.");
 
         var sortedDirectoryInfo = CheckForOrCreateDirectory(sortedDirectoryPath);
         var unsortedPhotoFiles = FindAllApplicablePhotoFiles(unsortedDirectoryInfo);
@@ -30,14 +30,13 @@ public class PhotoRenamerProgram(
             return 0;
         }
 
-        logger.LogInformation("Found {Count} files to process in '{UnsortedDirectoryPath}'.", unsortedPhotoFiles.Count,
-            unsortedDirectoryInfo.FullName);
+        logger.LogInformation("Found {Count} files to process in unsorted directory.", unsortedPhotoFiles.Count);
 
         foreach (var file in unsortedPhotoFiles)
-        {
             try
             {
-                logger.LogInformation("Processing file: {FileName}", file.Name);
+                var originalFilename = file.Name;
+                logger.LogDebug("Processing file: {FileName}", originalFilename);
 
                 if (!TryGetCreatedAtExifData(file, out var photoCreatedAtDateTime))
                 {
@@ -46,36 +45,38 @@ public class PhotoRenamerProgram(
                     continue;
                 }
 
-                // Sorted file structure will always follow /path/to/sorted/directory then /sorted/yyyy-MM/yyyy-MM-dd HH.mm.ss.fff.fileExtension
-                // Example: /some/place/sorted/2069-04/2069-04-20 04.20.42.420.HIF
-                var yearMonthString = photoCreatedAtDateTime.ToString("yyyy-MM", CultureInfo.InvariantCulture);
-                var destinationDirectory = Path.Combine(sortedDirectoryInfo.FullName, yearMonthString);
+                // Sorted file structure will always follow /path/to/sorted/directory then /sorted/yyyy-MM/
+                var destinationDirectoryInfo = new DirectoryInfo(
+                    Path.Combine(sortedDirectoryInfo.FullName,
+                        photoCreatedAtDateTime.ToString(
+                            "yyyy-MM",
+                            CultureInfo.InvariantCulture))
+                );
+                if (!destinationDirectoryInfo.Exists)
+                {
+                    logger.LogDebug(
+                        "Year-month directory does not exist yet, creating directory at path: {DestinationDirectory}",
+                        destinationDirectoryInfo);
+                    destinationDirectoryInfo.Create();
+                }
 
                 var newFileName =
                     photoCreatedAtDateTime.ToString("yyyy-MM-dd HH.mm.ss.fff", CultureInfo.InvariantCulture) +
                     file.Extension;
-                var destinationPath = Path.Combine(destinationDirectory, newFileName);
+                var destinationFileInfo = new FileInfo(Path.Combine(destinationDirectoryInfo.FullName, newFileName));
+                logger.LogDebug("New file path will be {DestinationPath}", destinationFileInfo);
 
-                logger.LogDebug("New file path will be {DestinationPath}", destinationPath);
-
-                if (!Directory.Exists($"{sortedDirectoryInfo.FullName}/{yearMonthString}"))
-                {
-                    logger.LogInformation(
-                        "Year-month directory does not exist yet, creating directory at path: {FullName}/{YearMonthString}", sortedDirectoryInfo.FullName, yearMonthString);
-                    Directory.CreateDirectory($"{sortedDirectoryInfo.FullName}/{yearMonthString}");
-                }
-
-                if (File.Exists(destinationPath))
+                if (destinationFileInfo.Exists)
                 {
                     logger.LogWarning(
-                        "Destination file already exists: {DestinationPath}. Skipping this file {FilePath}.",
-                        destinationPath, file.FullName);
-                    ;
+                        "Destination file already exists: {DestinationPath} Skipping this file {FilePath}",
+                        destinationFileInfo, file.FullName);
                     continue;
                 }
 
-                file.MoveTo(destinationPath);
-                logger.LogInformation("Moved '{Source}' -> '{Destination}'", file.FullName, destinationPath);
+                file.MoveTo(destinationFileInfo.FullName);
+                logger.LogInformation("Processed photo file: {OriginalFilename} ---> {NewFilename}", originalFilename,
+                    file.Name);
             }
             catch (IOException ioEx)
             {
@@ -85,7 +86,6 @@ public class PhotoRenamerProgram(
             {
                 logger.LogError(ex, "Unexpected error while processing file '{FileName}'. Skipping.", file.Name);
             }
-        }
 
         logger.LogInformation("Successfully processed {Count} files", unsortedPhotoFiles.Count);
         return 0;
@@ -96,16 +96,17 @@ public class PhotoRenamerProgram(
         var directoryInfo = new DirectoryInfo(directoryPath);
         if (directoryInfo.Exists) return directoryInfo;
 
-        logger.LogInformation("Sorted directory not found: {DirectoryPath}. Attempting to create the directory...", directoryPath);
+        logger.LogDebug("Sorted directory not found: {DirectoryPath}. Attempting to create the directory...",
+            directoryPath);
         Directory.CreateDirectory(directoryPath);
-        logger.LogInformation("Sorted directory created");
+        logger.LogDebug("Sorted directory created");
 
         return directoryInfo;
     }
 
-    // Find all files that look like Sony camera photos (e.g., containing "DSC") and are not yet renamed
+    // Find all files that look like Sony camera photos (e.g., starting with "DSC") and are not yet renamed
     // TODO: Review the name - it's doing more than this now with the changes handling the edge case.
-    private List<FileInfo> FindAllApplicablePhotoFiles(DirectoryInfo directory)
+    private List<FileInfo> FindAllApplicablePhotoFiles(DirectoryInfo unsortedDirectoryInfo)
     {
         try
         {
@@ -127,7 +128,7 @@ public class PhotoRenamerProgram(
             // What the below does is if all the files are valid and don't contain retries, we simply return the FileInfo for all of them - yippy
             // If there are any files that contain retries (any that contains "_"), then we do some work to ensure we only take the FileInfo of the highest N value file, assuming that it's complete.
 
-            var allMatchingPhotoFiles = directory.GetFiles("DSC*", new EnumerationOptions
+            var allMatchingPhotoFiles = unsortedDirectoryInfo.GetFiles("DSC*", new EnumerationOptions
             {
                 RecurseSubdirectories = false,
                 MatchCasing = MatchCasing.CaseInsensitive
@@ -135,12 +136,11 @@ public class PhotoRenamerProgram(
 
             if (!allMatchingPhotoFiles.Any(f => f.Name.Contains('_'))) return allMatchingPhotoFiles.ToList();
 
-            logger.LogDebug(
+            logger.LogInformation(
                 "Found files that might have been retried during FTP uploads. Picking the highest N value file for each group of files with the same name.");
             var filesToRename = allMatchingPhotoFiles.Select(f =>
                 {
                     if (f.Name.Contains('_'))
-                    {
                         return new
                         {
                             // Adjust the filename to what it should be (DSC0001_2.HIF -> DSC0001.HIF) - this becomes our grouping key!
@@ -149,7 +149,6 @@ public class PhotoRenamerProgram(
                             HasUnderscore = true,
                             FileInfoObject = f
                         };
-                    }
 
                     return new
                     {
@@ -184,31 +183,32 @@ public class PhotoRenamerProgram(
             logger.LogDebug("Found {Count} files that are possibly corrupted.", possiblyCorruptedFiles.Count);
 
             // TODO: Review if the sorted directory makes more sense. Update accordingly.
-            var likelyCorruptedImagesDirectoryPath = unsortedFilesDirectoryPath + "/likely-corrupted";
-            if (!Directory.Exists(likelyCorruptedImagesDirectoryPath))
+            var likelyCorruptedImagesDirectoryPath =
+                new DirectoryInfo(Path.Combine(unsortedDirectoryInfo.FullName, "likely-corrupted"));
+            if (!likelyCorruptedImagesDirectoryPath.Exists)
             {
                 logger.LogDebug(
                     "A directory containing likely corrupted image files did not exist. Creating it in path {Path}",
-                    likelyCorruptedImagesDirectoryPath);
-                Directory.CreateDirectory(unsortedFilesDirectoryPath + "/likely-corrupted");
+                    likelyCorruptedImagesDirectoryPath.FullName);
+                likelyCorruptedImagesDirectoryPath.Create();
             }
 
-            foreach (var file in possiblyCorruptedFiles)
+            possiblyCorruptedFiles.ForEach(f =>
             {
                 try
                 {
-                    file.MoveTo(unsortedFilesDirectoryPath + "/likely-corrupted/" + file.Name);
+                    f.MoveTo(Path.Combine(likelyCorruptedImagesDirectoryPath.FullName, f.Name), true);
+                    logger.LogDebug("Moved {Filename} to likely-corrupted directory", f.Name);
                 }
                 catch (Exception e)
                 {
                     logger.LogError(
                         "An unknown error occurred while moving file '{FilePath}' to the likely-corrupted directory. WARNING: Skipping moving this file - but it will remain in the unsorted directory! Error: {Error}",
-                        file.FullName, e);
+                        f.FullName, e);
                 }
-            }
+            });
 
-            logger.LogDebug("Moved {Count} files to {Path}", possiblyCorruptedFiles.Count,
-                likelyCorruptedImagesDirectoryPath);
+            logger.LogInformation("Moved {Count} files to likely-corrupted directory.", possiblyCorruptedFiles.Count);
 
             return filesToRename;
         }
@@ -248,7 +248,6 @@ public class PhotoRenamerProgram(
 
             double milliseconds = 0;
             if (exifData.ContainsTag(ExifDirectoryBase.TagSubsecondTime))
-            {
                 try
                 {
                     logger.LogDebug("Attempting to get subsecond EXIF data/tag value for file '{FilePath}'.",
@@ -256,13 +255,11 @@ public class PhotoRenamerProgram(
                     milliseconds = exifData.GetDouble(ExifDirectoryBase.TagSubsecondTime);
                     logger.LogDebug("Subsecond EXIF data found for file '{FilePath}'. Data: {Milliseconds}.",
                         filePath.FullName, milliseconds);
-                    ;
                 }
                 catch
                 {
                     logger.LogWarning("Unable to get subsecond EXIF data/tag value for file '{FilePath}'.", filePath);
                 }
-            }
 
             dateTime = baseDate.AddMilliseconds(milliseconds);
             return true;
