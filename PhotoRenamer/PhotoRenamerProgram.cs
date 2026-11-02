@@ -247,21 +247,19 @@ public class PhotoRenamerProgram(
                 baseDate);
 
             double milliseconds = 0;
-            if (exifData.ContainsTag(ExifDirectoryBase.TagSubsecondTime))
-                try
-                {
-                    logger.LogDebug("Attempting to get subsecond EXIF data/tag value for file '{FilePath}'.",
-                        filePath.FullName);
-                    milliseconds = exifData.GetDouble(ExifDirectoryBase.TagSubsecondTime);
-                    logger.LogDebug("Subsecond EXIF data found for file '{FilePath}'. Data: {Milliseconds}.",
-                        filePath.FullName, milliseconds);
-                }
-                catch
-                {
-                    logger.LogWarning("Unable to get subsecond EXIF data/tag value for file '{FilePath}'.", filePath);
-                }
+            if (TryGetSubsecondExifValue(exifData, filePath, out milliseconds))
+            {
+                dateTime = baseDate.AddMilliseconds(milliseconds);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "No subsecond EXIF tag (SubSecTime 37520 / SubSecTimeOriginal 37521 / SubSecTimeDigitized 37522) found for file '{FilePath}'. " +
+                    "Filename will be generated with second-only precision.",
+                    filePath.FullName);
+                dateTime = baseDate;
+            }
 
-            dateTime = baseDate.AddMilliseconds(milliseconds);
             return true;
         }
         catch
@@ -270,4 +268,53 @@ public class PhotoRenamerProgram(
             return false;
         }
     }
+
+    // Known EXIF subsecond tags, ordered by preference. Sony cameras typically write the
+    // value under SubSecTime (37520), but SubSecTimeOriginal (37521) / SubSecTimeDigitized
+    // (37522) are equally valid per the EXIF 2.32 spec, so fall through to them instead of
+    // silently dropping millisecond precision.
+    private static readonly int[] SubsecondExifTags =
+    [
+        ExifDirectoryBase.TagSubsecondTime, // 37520
+        ExifDirectoryBase.TagSubsecondTimeOriginal, // 37521
+        ExifDirectoryBase.TagSubsecondTimeDigitized // 37522
+    ];
+
+    /// <summary>
+    /// Attempts to read a subsecond EXIF value from <paramref name="exifData"/>, checking the known
+    /// subsecond tags in order and returning the first one that is present and readable.
+    /// </summary>
+    /// <param name="exifData">The EXIF SubIFD directory to read from.</param>
+    /// <param name="filePath">The file being processed (used for logging).</param>
+    /// <param name="milliseconds">When <c>true</c> is returned, the subsecond value in milliseconds.</param>
+    /// <returns><c>true</c> when a subsecond value was found; otherwise <c>false</c>.</returns>
+    private bool TryGetSubsecondExifValue(ExifSubIfdDirectory exifData, FileInfo filePath, out double milliseconds)
+    {
+        milliseconds = 0;
+        foreach (var tag in SubsecondExifTags)
+        {
+            if (!exifData.ContainsTag(tag))
+                continue;
+
+            try
+            {
+                logger.LogDebug("Attempting to get subsecond EXIF data (tag {Tag}) for file '{FilePath}'.",
+                    tag, filePath.FullName);
+                milliseconds = exifData.GetDouble(tag);
+                logger.LogInformation(
+                    "Subsecond EXIF data found for file '{FilePath}' (tag {Tag}). Data: {Milliseconds}.",
+                    filePath.FullName, tag, milliseconds);
+                return true;
+            }
+            catch (Exception e)
+            {
+                logger.LogWarning(
+                    "Unable to read subsecond EXIF data (tag {Tag}) for file '{FilePath}'. Error: {Error}",
+                    tag, filePath.FullName, e);
+            }
+        }
+
+        return false;
+    }
+
 }
